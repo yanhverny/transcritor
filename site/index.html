@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transcritor de Vídeo</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --text: #1d1c1a; --muted: #6b6862;
+    --line: #e2dfd8; --accent: #c2562f; --accent-text: #ffffff; --ok: #2f7d4f; --err: #b3261e;
+    --field: #faf9f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1a1918; --card: #242321; --text: #f0eee9; --muted: #a39f97;
+      --line: #383632; --accent: #e07a52; --accent-text: #1a1918; --ok: #6cc28f; --err: #f2867d;
+      --field: #1f1e1c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  .drop { border: 2px dashed var(--line); border-radius: 12px; padding: 32px 16px; text-align: center;
+    cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--field); }
+  .drop strong { display: block; font-size: 1.05rem; }
+  .drop span { color: var(--muted); font-size: .9rem; }
+  .file { margin-top: 12px; font-weight: 600; word-break: break-all; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
+  label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 4px; }
+  select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--field);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  button { font: inherit; font-weight: 600; border-radius: 8px; padding: 10px 16px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--field); color: var(--text); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); width: 100%; margin-top: 16px; padding: 12px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 10px 0 6px; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .status { font-size: .9rem; color: var(--muted); }
+  .status.err { color: var(--err); }
+  .status.ok { color: var(--ok); }
+  textarea { min-height: 280px; resize: vertical; line-height: 1.6; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--muted); margin-bottom: 8px; }
+  .toggle input { width: auto; }
+  .hint { font-size: .85rem; color: var(--muted); margin-top: 10px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Transcritor de Vídeo</h1>
+  <p class="sub">Transforma vídeo ou áudio em texto usando o Whisper. Roda no seu computador: o arquivo não é enviado para nenhum servidor.</p>
+
+  <section class="card">
+    <div class="drop" id="drop">
+      <strong>Arraste um vídeo ou áudio aqui</strong>
+      <span>ou clique para escolher (MP4, MOV, WEBM, MP3, WAV, M4A…)</span>
+      <div class="file" id="fileName"></div>
+    </div>
+    <input type="file" id="fileInput" accept="video/*,audio/*" class="hidden">
+
+    <div class="row">
+      <div>
+        <label for="model">Qualidade</label>
+        <select id="model">
+          <option value="onnx-community/whisper-base">Rápido (download ~200 MB)</option>
+          <option value="onnx-community/whisper-small" selected>Equilibrado (download ~600 MB)</option>
+          <option value="onnx-community/whisper-large-v3-turbo">Máxima (download ~1 GB, precisa de placa de vídeo)</option>
+        </select>
+      </div>
+      <div>
+        <label for="lang">Idioma do vídeo</label>
+        <select id="lang">
+          <option value="portuguese" selected>Português</option>
+          <option value="english">Inglês</option>
+          <option value="spanish">Espanhol</option>
+          <option value="french">Francês</option>
+          <option value="">Detectar automaticamente</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="primary" id="go" disabled>Transcrever</button>
+
+    <div id="progressBox" class="hidden">
+      <div class="bar"><div id="bar"></div></div>
+      <div class="status" id="status"></div>
+    </div>
+    <p class="hint">O modelo é baixado só na primeira vez e fica salvo no navegador. Use Chrome ou Edge para aproveitar a placa de vídeo.</p>
+  </section>
+
+  <section class="card hidden" id="resultCard">
+    <div class="toggle"><input type="checkbox" id="showTimes"><label for="showTimes" style="margin:0">Mostrar tempo de cada trecho</label></div>
+    <textarea id="output" spellcheck="false"></textarea>
+    <div class="actions">
+      <button id="copy">Copiar texto</button>
+      <button id="dlTxt">Baixar .txt</button>
+      <button id="dlSrt">Baixar legenda .srt</button>
+    </div>
+  </section>
+</main>
+
+<script id="workerSrc" type="text/plain">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
+
+env.allowLocalModels = false;
+const cacheCheck = (async () => {
+  try { await caches.open('transcritor-test'); } catch { env.useBrowserCache = false; }
+})();
+
+let transcriber = null, loadedKey = null, device = 'wasm';
+
+async function pickDevice() {
+  try {
+    const adapter = await navigator.gpu?.requestAdapter();
+    if (adapter) return { device: 'webgpu', fp16: adapter.features.has('shader-f16') };
+  } catch {}
+  return { device: 'wasm', fp16: false };
+}
+
+async function load(model) {
+  await cacheCheck;
+  const d = await pickDevice();
+  device = d.device;
+  if (model.includes('large') && !(d.device === 'webgpu' && d.fp16)) {
+    throw new Error('A qualidade "Máxima" precisa de uma placa de vídeo compatível com WebGPU. Escolha "Equilibrado".');
+  }
+  const key = model + device;
+  if (transcriber && loadedKey === key) return;
+  if (transcriber) { await transcriber.dispose?.(); transcriber = null; }
+  const dtype = device === 'webgpu'
+    ? { encoder_model: model.includes('large') ? 'fp16' : 'fp32', decoder_model_merged: 'q4' }
+    : 'q8';
+  transcriber = await pipeline('automatic-speech-recognition', model, {
+    device, dtype,
+    progress_callback: (p) => self.postMessage({ type: 'download', p }),
+  });
+  loadedKey = key;
+}
+
+self.onmessage = async ({ data }) => {
+  try {
+    self.postMessage({ type: 'status', text: 'Carregando o modelo…' });
+    await load(data.model);
+    self.postMessage({ type: 'ready', device });
+
+    const SR = 16000, BLOCK = 180 * SR;
+    const audio = data.audio;
+    const blocks = Math.max(1, Math.ceil(audio.length / BLOCK));
+    const segments = [];
+    for (let i = 0; i < blocks; i++) {
+      const slice = audio.subarray(i * BLOCK, Math.min(audio.length, (i + 1) * BLOCK));
+      const offset = (i * BLOCK) / SR;
+      const sliceEnd = offset + slice.length / SR;
+      const out = await transcriber(slice, {
+        language: data.language || undefined,
+        task: 'transcribe',
+        chunk_length_s: 30,
+        stride_length_s: 5,
+        return_timestamps: true,
+      });
+      const chunks = out.chunks?.length ? out.chunks : [{ timestamp: [0, null], text: out.text }];
+      for (const c of chunks) {
+        const text = (c.text || '').trim();
+        if (!text) continue;
+        const s = offset + (c.timestamp?.[0] ?? 0);
+        const e = c.timestamp?.[1] != null ? Math.min(offset + c.timestamp[1], sliceEnd) : sliceEnd;
+        segments.push({ start: s, end: Math.max(e, s + 0.5), text });
+      }
+      self.postMessage({ type: 'partial', done: i + 1, total: blocks, segments });
+    }
+    self.postMessage({ type: 'done', segments });
+  } catch (err) {
+    self.postMessage({ type: 'error', text: String(err?.message || err) });
+  }
+};
+</script>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let file = null, segments = [], worker = null, busy = false;
+
+function getWorker() {
+  if (!worker) {
+    const blob = new Blob([$('workerSrc').textContent], { type: 'text/javascript' });
+    worker = new Worker(URL.createObjectURL(blob), { type: 'module' });
+    worker.onmessage = onWorkerMessage;
+    worker.onerror = (e) => fail('Erro ao iniciar: ' + (e.message || 'verifique sua conexão com a internet.'));
+  }
+  return worker;
+}
+
+function setFile(f) {
+  if (!f) return;
+  file = f;
+  $('fileName').textContent = f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB)';
+  $('go').disabled = busy;
+}
+
+$('drop').onclick = () => $('fileInput').click();
+$('fileInput').onchange = (e) => setFile(e.target.files[0]);
+$('drop').ondragover = (e) => { e.preventDefault(); $('drop').classList.add('over'); };
+$('drop').ondragleave = () => $('drop').classList.remove('over');
+$('drop').ondrop = (e) => { e.preventDefault(); $('drop').classList.remove('over'); setFile(e.dataTransfer.files[0]); };
+
+function status(text, cls = '') { const s = $('status'); s.textContent = text; s.className = 'status ' + cls; }
+function bar(pct) { $('bar').style.width = Math.max(0, Math.min(100, pct)) + '%'; }
+function fail(text) { status(text, 'err'); busy = false; $('go').disabled = !file; }
+
+const dl = {};
+let startTime = 0, audioSeconds = 0;
+
+function onWorkerMessage({ data }) {
+  if (data.type === 'status') status(data.text);
+  else if (data.type === 'download') {
+    const p = data.p;
+    if (p.status === 'progress' && p.total) {
+      dl[p.file] = { loaded: p.loaded, total: p.total };
+      const vals = Object.values(dl);
+      const loaded = vals.reduce((a, v) => a + v.loaded, 0), total = vals.reduce((a, v) => a + v.total, 0);
+      bar(loaded / total * 100);
+      status(`Baixando o modelo (só na primeira vez): ${(loaded / 1048576).toFixed(0)} de ${(total / 1048576).toFixed(0)} MB`);
+    }
+  } else if (data.type === 'ready') {
+    bar(0);
+    startTime = performance.now();
+    status(`Transcrevendo… (${data.device === 'webgpu' ? 'usando a placa de vídeo' : 'usando o processador, pode demorar'})`);
+  } else if (data.type === 'partial') {
+    segments = data.segments; render();
+    $('resultCard').classList.remove('hidden');
+    bar(data.done / data.total * 100);
+    const el = (performance.now() - startTime) / 1000;
+    const left = el / data.done * (data.total - data.done);
+    status(data.done < data.total
+      ? `Transcrevendo… ${Math.round(data.done / data.total * 100)}% (faltam ~${fmtDur(left)})`
+      : 'Finalizando…');
+  } else if (data.type === 'done') {
+    segments = data.segments; render();
+    bar(100);
+    const el = (performance.now() - startTime) / 1000;
+    status(`Pronto! ${fmtDur(audioSeconds)} de áudio transcritos em ${fmtDur(el)}.`, 'ok');
+    busy = false; $('go').disabled = false;
+  } else if (data.type === 'error') fail('Erro: ' + data.text);
+}
+
+async function decodeAudio(f) {
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  try {
+    const buf = await ctx.decodeAudioData(await f.arrayBuffer());
+    if (buf.numberOfChannels === 1) return buf.getChannelData(0);
+    const out = new Float32Array(buf.length);
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const ch = buf.getChannelData(c);
+      for (let i = 0; i < ch.length; i++) out[i] += ch[i] / buf.numberOfChannels;
+    }
+    return out;
+  } finally { ctx.close(); }
+}
+
+$('go').onclick = async () => {
+  if (!file || busy) return;
+  busy = true; $('go').disabled = true;
+  $('progressBox').classList.remove('hidden');
+  segments = []; render(); bar(0);
+  status('Lendo o áudio do arquivo…');
+  let audio;
+  try { audio = await decodeAudio(file); }
+  catch { return fail('Não consegui ler o áudio deste arquivo. Tente outro formato (MP4, MP3, WAV, WEBM).'); }
+  audioSeconds = audio.length / 16000;
+  getWorker().postMessage({ audio, model: $('model').value, language: $('lang').value }, [audio.buffer]);
+};
+
+function pad(n, w = 2) { return String(n).padStart(w, '0'); }
+function clock(t, srt = false) {
+  const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = Math.floor(t % 60), ms = Math.round((t % 1) * 1000);
+  return srt ? `${pad(h)}:${pad(m)}:${pad(s)},${pad(Math.min(ms, 999), 3)}` : `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+function fmtDur(t) {
+  t = Math.max(0, Math.round(t));
+  const m = Math.floor(t / 60), s = t % 60;
+  return m ? `${m} min ${s} s` : `${s} s`;
+}
+
+function plainText() {
+  // Agrupa frases em parágrafos quando há uma pausa ou a cada ~6 trechos
+  const paras = []; let cur = [], last = 0;
+  for (const s of segments) {
+    if (cur.length && (s.start - last > 2.5 || cur.length >= 6) && /[.!?…]$/.test(cur[cur.length - 1])) { paras.push(cur.join(' ')); cur = []; }
+    cur.push(s.text); last = s.end;
+  }
+  if (cur.length) paras.push(cur.join(' '));
+  return paras.join('\n\n');
+}
+function timedText() { return segments.map(s => `[${clock(s.start)}] ${s.text}`).join('\n'); }
+function srtText() {
+  return segments.map((s, i) => `${i + 1}\n${clock(s.start, true)} --> ${clock(s.end, true)}\n${s.text}\n`).join('\n');
+}
+function render() { $('output').value = $('showTimes').checked ? timedText() : plainText(); }
+$('showTimes').onchange = render;
+
+function baseName() { return (file?.name || 'transcricao').replace(/\.[^.]+$/, ''); }
+function download(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('dlTxt').onclick = () => download(baseName() + '.txt', $('output').value);
+$('dlSrt').onclick = () => download(baseName() + '.srt', srtText());
+$('copy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('output').value); }
+  catch { $('output').select(); document.execCommand('copy'); }
+  $('copy').textContent = 'Copiado!'; setTimeout(() => $('copy').textContent = 'Copiar texto', 1500);
+};
+</script>
+</body>
+</html>
