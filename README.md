@@ -22,8 +22,12 @@ O modelo é baixado só na primeira vez e fica salvo no navegador.
 **No Windows, sem instalar nada:** clique duas vezes em `Abrir Transcritor.bat`.
 Ele abre a página em `http://localhost:8765/`. Deixe a janela preta aberta enquanto usa.
 
-**Como site:** a pasta `site/` tem o `index.html` pronto para publicar em qualquer
-hospedagem estática (Netlify, GitHub Pages, Cloudflare Pages).
+**Online:** https://yanhverny.github.io/transcritor/ (publicado automaticamente pelo
+GitHub Pages a cada `git push` na branch `main`; o `index.html` da raiz só redireciona
+para o `transcritor.html`).
+
+**Em outra hospedagem:** a pasta `site/` tem o `index.html` pronto para publicar em
+qualquer hospedagem estática (Netlify, Cloudflare Pages).
 
 Use Chrome ou Edge para aproveitar a placa de vídeo.
 
